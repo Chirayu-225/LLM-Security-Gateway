@@ -1,0 +1,15 @@
+agent_name: research_assistant_agent
+description: >
+  An agent that answers questions using a company knowledge base and can
+  draft (but not send) emails for human review.
+allowed_tools:
+  - tool_name: knowledge_base_search
+    permission_level: read_only
+    data_scope: "kb://public_docs"
+
+  - tool_name: draft_email
+    permission_level: write
+    data_scope: "drafts_folder"
+
+  - tool_name: calendar_read
+    permission_level: read_only
