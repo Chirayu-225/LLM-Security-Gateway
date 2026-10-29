@@ -136,14 +136,28 @@ def pill(kind: str, label: str) -> str:
     return f'<span class="gw-pill {kind}">{html.escape(str(label))}</span>'
 
 
+def _auth_headers() -> dict:
+    key = st.session_state.get("gateway_api_key", "")
+    return {"X-API-Key": key} if key else {}
+
+
 def fetch_stats():
     try:
-        resp = requests.get(f"{API_BASE}/stats", timeout=5)
+        resp = requests.get(f"{API_BASE}/stats", headers=_auth_headers(), timeout=5)
+        if resp.status_code == 401:
+            st.warning("Enter your Gateway API key in the sidebar to load stats (set as GATEWAY_API_KEY in .env).")
+            return None
         resp.raise_for_status()
         return resp.json()
     except requests.RequestException as e:
         st.error(f"Could not reach the gateway API at {API_BASE}. Is it running? ({e})")
         return None
+
+
+with st.sidebar:
+    st.markdown("##### Gateway API Key")
+    st.caption("Required for Agent Violations, Red-Team Report, and Live Traffic — must match GATEWAY_API_KEY in the server's .env.")
+    st.text_input("X-API-Key", type="password", key="gateway_api_key")
 
 
 # ----------------------------------------------------------------------
@@ -264,12 +278,16 @@ with tab_agent:
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("##### Test a Tool Call Against a Manifest")
-    manifest_path = st.text_input("Manifest path", value="manifests/example_agent.yaml")
+    manifest_id = st.text_input("Manifest ID", value="research_assistant_agent",
+                                 help="Not a filesystem path — must match a key in main.py's MANIFEST_ALLOWLIST.")
     c1, c2, c3 = st.columns(3)
     with c1:
         tool_name = st.text_input("Tool name", value="draft_email")
     with c2:
-        permission = st.selectbox("Requested permission", ["read_only", "write", "execute"])
+        permission = st.selectbox("Claimed permission (audit-only)", ["read_only", "write", "execute"],
+                                   help="No longer trusted for the decision — the server derives the real "
+                                        "required permission from app/agent_audit/tool_registry.py. This is "
+                                        "logged for comparison only.")
     with c3:
         scope = st.text_input("Scope (optional)", value="")
 
@@ -277,15 +295,16 @@ with tab_agent:
         try:
             resp = requests.post(
                 f"{API_BASE}/agent/check-tool-call",
+                headers=_auth_headers(),
                 json={
-                    "manifest_path": manifest_path,
+                    "manifest_id": manifest_id,
                     "tool_name": tool_name,
                     "requested_permission": permission,
                     "scope": scope or None,
                 },
                 timeout=5,
             )
-            st.session_state.last_tool_check = resp.json()
+            st.session_state.last_tool_check = resp.json() if resp.status_code != 401 else {"request_error": "401 Unauthorized — check your API key in the sidebar."}
         except requests.RequestException as e:
             st.session_state.last_tool_check = {"request_error": str(e)}
         st.rerun()
@@ -307,8 +326,8 @@ with tab_redteam:
     if st.button("▶ Run red-team suite now"):
         with st.spinner("Replaying attack suite against the gateway..."):
             try:
-                resp = requests.post(f"{API_BASE}/redteam/run", timeout=120)
-                st.session_state.last_redteam_result = resp.json()
+                resp = requests.post(f"{API_BASE}/redteam/run", headers=_auth_headers(), timeout=120)
+                st.session_state.last_redteam_result = resp.json() if resp.status_code not in (401, 429) else {"request_error": f"{resp.status_code} — check your API key or wait for the rate limit to reset."}
             except requests.RequestException as e:
                 st.session_state.last_redteam_result = {"request_error": str(e)}
         st.rerun()

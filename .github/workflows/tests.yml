@@ -1,0 +1,46 @@
+# Extension #5 from the review: "Add ... a pytest suite covering the
+# bypasses above, and CI that runs the red-team suite and fails the build
+# if the attack success rate regresses. The CI piece reads as 'this person
+# knows how security works in real engineering teams.'"
+#
+# This runs the network-independent regression tests (the permission
+# enforcer bypasses, regex false-positive/miss fixes, dangerous-code
+# pattern split, session tracker) on every push and PR. It deliberately
+# does NOT run evaluation/run_eval.py or the full pipeline, since those
+# need a GROQ_API_KEY and a downloaded embedding model — add a separate,
+# manually-triggered workflow for that once you have a CI secret set up
+# for GROQ_API_KEY, so real API spend only happens on demand, not on every
+# push.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  regression-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install lightweight deps only
+        # Deliberately NOT the full requirements.txt (sentence-transformers
+        # + presidio + torch are large and these tests don't need them —
+        # see each test file's docstring for why it's split this way).
+        run: pip install pydantic pyyaml
+
+      - name: Run permission-enforcer bypass regression tests
+        run: python tests/test_enforcer_bypasses.py
+
+      - name: Run input-filter regex/normalization tests
+        run: python tests/test_input_filter_regex.py
+
+      - name: Run output-filter dangerous-code pattern tests
+        run: python tests/test_output_filter_code_patterns.py
+
+      - name: Run session-tracker tests
+        run: python tests/test_session_tracker.py

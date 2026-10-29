@@ -1,8 +1,7 @@
 # Secrets — never commit real API keys
 .env
 
-# Virtual environment (yours is named "aisec")
-aisec/
+# Virtual environment
 venv/
 .venv/
 env/
@@ -11,6 +10,7 @@ env/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 
 # Local database (regenerates automatically on first run)
 gateway.db
@@ -20,3 +20,4 @@ gateway.db
 .DS_Store
 .vscode/
 .idea/
+aisec/
